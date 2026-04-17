@@ -22,7 +22,7 @@ MESSAGES = {
     "idle": "Claude 在等你输入",
     "permission": "Claude 请求使用 {tool} 的权限",
     "permission_generic": "Claude 请求权限",
-    "default": "Claude 需要你",
+    "default": "Claude 在呼叫你",
     "stop": "Claude 回复完了",
 }
 
@@ -52,21 +52,18 @@ def gc_old_states():
             pass
 
 
-def translate(msg):
+def classify(msg):
+    """返回 (kind, translated_msg)。kind ∈ {'idle', 'permission', 'other'}。"""
     low = msg.lower()
     if "waiting for your input" in low:
-        return MESSAGES["idle"]
+        return "idle", MESSAGES["idle"]
     if "needs your permission" in low:
         if "permission to use" in low:
             tool = msg.split("permission to use", 1)[-1].strip().rstrip(".")
             if tool and len(tool) < 80 and "\n" not in tool:
-                return MESSAGES["permission"].format(tool=tool)
-        return MESSAGES["permission_generic"]
-    return msg
-
-
-def is_idle_event(msg):
-    return "waiting for your input" in msg.lower()
+                return "permission", MESSAGES["permission"].format(tool=tool)
+        return "permission", MESSAGES["permission_generic"]
+    return "other", msg
 
 
 def notify(text, sound):
@@ -74,11 +71,8 @@ def notify(text, sound):
         f"display notification {json.dumps(text, ensure_ascii=False)} "
         f'with title "Claude Code" sound name "{sound}"'
     )
-    try:
-        with open(LOG, "a") as log:
-            subprocess.run(["osascript", "-e", cmd], stderr=log, check=False)
-    except FileNotFoundError:
-        pass
+    with open(LOG, "a") as log:
+        subprocess.run(["osascript", "-e", cmd], stderr=log, check=False)
 
 
 def normalize_msg(raw):
@@ -92,8 +86,9 @@ def handle_notification(event):
     msg = normalize_msg(event.get("message"))
     sid = clean_sid(event.get("session_id"))
     state = state_path(sid)
+    kind, translated = classify(msg)
 
-    if is_idle_event(msg):
+    if kind == "idle":
         if os.path.exists(state):
             return
         open(state, "w").close()
@@ -104,7 +99,7 @@ def handle_notification(event):
         except FileNotFoundError:
             pass
 
-    notify(translate(msg), "Glass")
+    notify(translated, "Glass")
 
 
 def handle_stop(event):

@@ -1,35 +1,52 @@
 #!/bin/bash
-# Claude Code Notification hook: macOS 原生 banner 通知 + Glass 提示音。
-#
-# 同一会话内 "waiting for your input" 空闲提醒只响第一次；
-# 响应过其他事件后状态重置，下次空闲会再提醒一次。
-#
-# Dependencies: python3 (macOS 自带), osascript (macOS 自带).
+# Claude Code Notification hook: macOS banner 通知 + Glass 声。
+# 同一会话内 "waiting for your input" 空闲提醒只响第一次；其他事件重置去重状态。
+# Dependencies: python3, osascript (macOS 自带)
+set -u
 
-input=$(cat)
+LOG="${TMPDIR:-/tmp}/claude-notify.log"
+INPUT=$(cat)
 
-IFS=$'\t' read -r SID MSG IS_IDLE <<< "$(printf '%s' "$input" | python3 -c '
-import json, sys
+RESULT=$(CLAUDE_HOOK_INPUT="$INPUT" python3 <<'PY'
+import json, os, re, sys, time
+
 try:
-    d = json.loads(sys.stdin.read())
+    d = json.loads(os.environ.get("CLAUDE_HOOK_INPUT") or "{}")
 except Exception:
     d = {}
-msg = (d.get("message") or "Claude needs your attention").replace("\n"," ").replace("\r"," ").replace("\t"," ")
-sid = (d.get("session_id") or "default").replace("\t","_")
-is_idle = "1" if "waiting for your input" in msg.lower() else "0"
-print(f"{sid}\t{msg}\t{is_idle}")
-')"
 
-state="/tmp/claude-notify-${SID}.waiting"
+raw_sid = d.get("session_id") or "default"
+sid = re.sub(r"[^A-Za-z0-9_-]", "_", raw_sid)[:64]
+msg = (d.get("message") or "Claude needs your attention")
+msg = msg.replace("\n", " ").replace("\r", " ").strip()
 
-if [ "$IS_IDLE" = "1" ]; then
-  [ -f "$state" ] && exit 0
-  touch "$state"
-else
-  rm -f "$state"
-fi
+tmp = (os.environ.get("TMPDIR") or "/tmp").rstrip("/")
+state = f"{tmp}/claude-notify-{sid}.waiting"
 
-python3 -c '
-import json, sys
-print(f"display notification {json.dumps(sys.argv[1])} with title \"Claude Code\" sound name \"Glass\"")
-' "$MSG" | osascript 2>/dev/null || true
+# GC：清掉 7 天前的 state 文件
+try:
+    cutoff = time.time() - 7 * 86400
+    for name in os.listdir(tmp):
+        if name.startswith("claude-notify-") and name.endswith(".waiting"):
+            p = f"{tmp}/{name}"
+            if os.path.getmtime(p) < cutoff:
+                os.remove(p)
+except Exception:
+    pass
+
+if "waiting for your input" in msg.lower():
+    if os.path.exists(state):
+        sys.exit(0)  # dedup：静默跳过
+    open(state, "w").close()
+else:
+    try:
+        os.remove(state)
+    except FileNotFoundError:
+        pass
+
+print(f'display notification {json.dumps(msg)} with title "Claude Code" sound name "Glass"')
+PY
+)
+
+[ -n "$RESULT" ] && echo "$RESULT" | osascript 2>>"$LOG"
+exit 0

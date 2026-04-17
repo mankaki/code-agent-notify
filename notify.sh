@@ -20,6 +20,18 @@ sid = re.sub(r"[^A-Za-z0-9_-]", "_", raw_sid)[:64]
 msg = (d.get("message") or "Claude needs your attention")
 msg = msg.replace("\n", " ").replace("\r", " ").strip()
 
+# 基于英文原文的分类（必须在翻译前）
+low = msg.lower()
+is_idle = "waiting for your input" in low
+
+# 英文消息翻译成中文，未命中的保留原文
+if is_idle:
+    msg = "Claude 在等你输入"
+elif "needs your permission" in low:
+    m = re.search(r"permission to (?:use |run )?(.+?)[\s\.]*$", msg, re.I)
+    tool = m.group(1).strip() if m else ""
+    msg = f"Claude 请求使用 {tool} 的权限" if tool else "Claude 请求权限"
+
 tmp = (os.environ.get("TMPDIR") or "/tmp").rstrip("/")
 state = f"{tmp}/claude-notify-{sid}.waiting"
 
@@ -34,7 +46,7 @@ try:
 except Exception:
     pass
 
-if "waiting for your input" in msg.lower():
+if is_idle:
     if os.path.exists(state):
         sys.exit(0)  # dedup：静默跳过
     open(state, "w").close()

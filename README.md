@@ -26,6 +26,7 @@ cd claude-code-notify
 # 2. 放到 ~/.claude/
 cp notify.sh ~/.claude/notify.sh
 chmod +x ~/.claude/notify.sh
+cp icon.png ~/.claude/icon.png   # Claude logo，dialog 会用它；没有就 fallback 系统图标
 
 # 3. 合并 hooks 到你的 ~/.claude/settings.json
 #    —— 如果文件不存在，直接复制 settings.json 过去

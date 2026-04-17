@@ -22,6 +22,7 @@ MESSAGES = {
     "idle": "Claude 在等你输入",
     "permission": "Claude 请求使用 {tool} 的权限",
     "permission_generic": "Claude 请求权限",
+    "needs_attention": "Claude 在呼叫你",
     "default": "Claude 在呼叫你",
     "stop": "Claude 回复完了",
 }
@@ -63,6 +64,8 @@ def classify(msg):
             if tool and len(tool) < 80 and "\n" not in tool:
                 return "permission", MESSAGES["permission"].format(tool=tool)
         return "permission", MESSAGES["permission_generic"]
+    if "needs your attention" in low:
+        return "other", MESSAGES["needs_attention"]
     return "other", msg
 
 

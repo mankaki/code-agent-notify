@@ -56,10 +56,11 @@ def translate(msg):
     low = msg.lower()
     if "waiting for your input" in low:
         return MESSAGES["idle"]
-    if "needs your permission to use" in low:
-        tool = msg.split("permission to use", 1)[-1].strip().rstrip(".")
-        if tool and len(tool) < 80 and "\n" not in tool:
-            return MESSAGES["permission"].format(tool=tool)
+    if "needs your permission" in low:
+        if "permission to use" in low:
+            tool = msg.split("permission to use", 1)[-1].strip().rstrip(".")
+            if tool and len(tool) < 80 and "\n" not in tool:
+                return MESSAGES["permission"].format(tool=tool)
         return MESSAGES["permission_generic"]
     return msg
 

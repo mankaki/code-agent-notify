@@ -39,14 +39,20 @@ def first_nonempty(*values):
 
 
 def looks_like_review_text(text):
-    low = text.lower()
-    return (
-        "code review finished" in low
-        or "review comment:" in low
-        or "full review comments:" in low
-        or low.startswith("findings")
-        or low.startswith("review:")
-    )
+    lines = [line.strip().lower() for line in text.replace("\r", "").splitlines() if line.strip()]
+    if not lines:
+        return False
+
+    first = lines[0]
+    if "code review finished" in first:
+        return True
+    if first in ("review comment:", "full review comments:", "findings:", "review:"):
+        return True
+    if re.match(r"^\[p\d+\]", first, re.IGNORECASE):
+        return True
+
+    first_few = lines[:4]
+    return any(re.search(r"(?:^|\s)[•-]\s*(?:-\s*)?\[p\d+\]", line) for line in first_few)
 
 
 def looks_like_review_payload(payload):
@@ -71,22 +77,37 @@ def summarize_review_text(text):
     for line in lines:
         if re.fullmatch(r"[─━—_-]{3,}", line):
             continue
-        normalized.append(re.sub(r"^[-•]\s*", "", line).strip())
+        cleaned = re.sub(r"^(?:[-•]\s*)+(?:-\s*)?", "", line).strip()
+        normalized.append(cleaned)
+
+    boilerplate = {
+        "review comment:",
+        "full review comments:",
+        "findings:",
+        "review:",
+        "summary:",
+    }
+
+    for line in normalized:
+        if re.match(r"^\[p\d+\]", line, re.IGNORECASE):
+            return line
 
     for idx, line in enumerate(normalized):
         low = line.lower()
-        if low in ("review comment:", "full review comments:", "findings:", "review:"):
+        if low in boilerplate:
             for next_line in normalized[idx + 1 :]:
                 next_low = next_line.lower()
-                if next_low in ("review comment:", "full review comments:", "findings:", "review:"):
+                if next_low in boilerplate or re.match(r"^worked for\b", next_low):
                     continue
+                if re.match(r"^\[p\d+\]", next_line, re.IGNORECASE):
+                    return next_line
                 if next_line and not re.fullmatch(r"[─━—_-]{3,}", next_line):
                     return next_line
             return MESSAGES["review_complete"]
 
     for line in normalized:
         low = line.lower()
-        if low in ("findings:", "review:"):
+        if low in boilerplate or re.match(r"^worked for\b", low):
             continue
         if line and not re.fullmatch(r"[─━—_-]{3,}", line):
             return line

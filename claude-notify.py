@@ -17,6 +17,7 @@ LOG = f"{TMP}/claude-notify.log"
 STATE_PREFIX = "claude-notify-"
 STATE_SUFFIX = ".waiting"
 GC_MAX_AGE_SECONDS = 7 * 86400
+SOUND_DIR = "/System/Library/Sounds"
 
 MESSAGES = {
     "idle": "Claude 在等你输入",
@@ -73,10 +74,25 @@ def classify(msg):
 def notify(text, sound):
     cmd = (
         f"display notification {json.dumps(text, ensure_ascii=False)} "
-        f'with title "Claude Code" sound name "{sound}"'
+        f'with title "Claude Code"'
     )
     with open(LOG, "a") as log:
         subprocess.run(["osascript", "-e", cmd], stderr=log, check=False)
+        play_sound(sound, log)
+
+
+def play_sound(sound, log):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", sound or ""):
+        return
+    path = os.path.join(SOUND_DIR, f"{sound}.aiff")
+    if not os.path.exists(path):
+        return
+    subprocess.Popen(
+        ["/usr/bin/afplay", path],
+        stdout=subprocess.DEVNULL,
+        stderr=log,
+        close_fds=True,
+    )
 
 
 def normalize_msg(raw):

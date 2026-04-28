@@ -7,6 +7,7 @@ import sys
 
 TMP = (os.environ.get("TMPDIR") or "/tmp").rstrip("/")
 LOG = f"{TMP}/codex-notify.log"
+SOUND_DIR = "/System/Library/Sounds"
 
 MESSAGES = {
     "task_complete": "Codex 回复完了",
@@ -23,10 +24,25 @@ COMPLETE_TYPES = {"agent-turn-complete", "task_complete", "review_ended", "exite
 def notify(text, sound="Glass"):
     cmd = (
         f"display notification {json.dumps(text, ensure_ascii=False)} "
-        f'with title "Codex" sound name "{sound}"'
+        f'with title "Codex"'
     )
     with open(LOG, "a") as log:
         subprocess.run(["osascript", "-e", cmd], stderr=log, check=False)
+        play_sound(sound, log)
+
+
+def play_sound(sound, log):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", sound or ""):
+        return
+    path = os.path.join(SOUND_DIR, f"{sound}.aiff")
+    if not os.path.exists(path):
+        return
+    subprocess.Popen(
+        ["/usr/bin/afplay", path],
+        stdout=subprocess.DEVNULL,
+        stderr=log,
+        close_fds=True,
+    )
 
 
 def first_nonempty(*values):
